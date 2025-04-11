@@ -1,0 +1,140 @@
+import cv2
+import numpy as np
+import face_recognition
+import os
+import csv
+from datetime import datetime
+
+
+
+# Load images and encode faces
+# def load_images():
+#     path = "images"
+#     images = []
+#     classNames = []
+
+#     if not os.path.exists(path):
+#         print(f⚠️ Warning: The folder '{path}' does not exist! Creating it now...")
+#         os.makedirs(path)
+#         return images, classNames
+
+#     fileList = os.listdir(path)
+#     print(f"📂 Found files: {fileList}")  # Debugging line
+
+#     for file in fileList:
+#         curImg = cv2.imread(f'{path}/{file}')
+#         if curImg is not None:
+#             images.append(curImg)
+#             classNames.append(os.path.splitext(file)[0])  
+#             print(f"✅ Loaded: {file}")  # Debugging line
+#         else:
+#             print(f"⚠️ Warning: Unable to read '{file}'.")
+
+#     return images, classNames
+
+# import os
+
+# Load images and encode faces
+def load_images():
+    # path = "images"///
+    path = os.path.join(os.path.dirname(__file__), "images")
+
+
+    print(f"Looking for images in: {os.path.abspath(path)}")
+
+    images = []
+    classNames = []
+
+    if not os.path.exists(path):
+        print("❌ The 'images' folder does not exist.")
+        return images, classNames
+
+    fileList = os.listdir(path)
+    print(f"📂 Found files: {fileList}")
+
+    for file in fileList:
+        if file.lower().endswith(('.png', '.jpg', '.jpeg')):  # Ensure only image files are read
+            print(f"✅ Loading image: {file}")
+            images.append(cv2.imread(f'{path}/{file}'))
+            classNames.append(os.path.splitext(file)[0])  # Get name without extension
+
+    return images, classNames
+
+
+
+
+# Encode the loaded images
+def encode_faces(images):
+    encodeList = []
+    for img in images:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        encode = face_recognition.face_encodings(img)
+        if encode:
+            encodeList.append(encode[0])
+    return encodeList
+
+# Load images and get encodings
+images, classNames = load_images()
+knownEncodings = encode_faces(images)
+print("Encoding completed!")
+
+
+import os
+from datetime import datetime
+
+def mark_attendance(name):
+    # Ensure attendance.csv is saved inside Face_Recognition_Attendance folder
+    folder_path = os.path.dirname(__file__)  # Get current script directory
+    file_path = os.path.join(folder_path, "attendance.csv")  # Correct path
+
+    # ✅ Check if the file exists; if not, create it with headers
+    if not os.path.exists(file_path):
+        with open(file_path, "w") as f:
+            f.write("Name,Time\n")  # Add column headers
+
+    # ✅ Read existing names to avoid duplicate entries
+    with open(file_path, "r+") as file:
+        content = file.readlines()
+        name_list = [line.split(",")[0] for line in content]
+
+        if name not in name_list:
+            now = datetime.now()
+            time_string = now.strftime("%H:%M:%S")
+
+            file.write(f"{name},{time_string}\n")  # Append new entry
+            print(f"✅ Attendance marked for {name} at {time_string}")
+
+
+
+# Start webcam
+cap = cv2.VideoCapture(0)
+
+while True:
+    success, img = cap.read()
+    imgS = cv2.resize(img, (0, 0), fx=0.25, fy=0.25)  # Reduce size for faster processing
+    imgS = cv2.cvtColor(imgS, cv2.COLOR_BGR2RGB)
+
+    facesCurrentFrame = face_recognition.face_locations(imgS)
+    encodesCurrentFrame = face_recognition.face_encodings(imgS, facesCurrentFrame)
+
+    for encodeFace, faceLoc in zip(encodesCurrentFrame, facesCurrentFrame):
+        matches = face_recognition.compare_faces(knownEncodings, encodeFace)
+        faceDist = face_recognition.face_distance(knownEncodings, encodeFace)
+        bestMatchIndex = np.argmin(faceDist)
+
+        if matches[bestMatchIndex]:
+            name = classNames[bestMatchIndex]
+            mark_attendance(name)
+
+            # Draw a rectangle around the face
+            y1, x2, y2, x1 = faceLoc
+            y1, x2, y2, x1 = y1 * 4, x2 * 4, y2 * 4, x1 * 4
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(img, name, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+
+    cv2.imshow('Webcam', img)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
